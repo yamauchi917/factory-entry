@@ -268,7 +268,7 @@ function renderNames() {
 function pickName(e) {
   // 前回の退室を押し忘れている（入室中のまま）
   if (mode === "in" && e.status === "in") {
-    modal(`${e.name} さんは\n退室の記録がありません。\n入室を記録しますか？`, [
+    modal(`${e.name} さんは\n退室の記録がありませんが、\n入室を記録しますか？`, [
       { label: "記録する", cls: "in-color", onClick: () => startCapture(e, "in", "退室記録なし") },
       { label: "やめる" },
     ]);
@@ -276,7 +276,7 @@ function pickName(e) {
   }
   // 入室を押し忘れている
   if (mode === "out" && e.status !== "in") {
-    modal(`${e.name} さんは\n入室の記録がありません。\n退室を記録しますか？`, [
+    modal(`${e.name} さんは\n入室の記録がありませんが、\n退室を記録しますか？`, [
       { label: "記録する", cls: "out-color", onClick: () => startCapture(e, "out", "入室記録なし") },
       { label: "やめる" },
     ]);
