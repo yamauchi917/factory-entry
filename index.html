@@ -222,7 +222,7 @@ function renderHome() {
   $("homeInfo").textContent = employees.length ? `現在 入室中：${n}人` : "";
   const msgs = [];
   if (!gasUrl || !token) msgs.push("設定が済んでいません（時計を5回タップして設定）");
-  if (netError) msgs.push(netError);
+  if (netError) msgs.push(netError + (netDetail ? "（" + netDetail + "）" : ""));
   if (queue.length) msgs.push(`未送信の記録：${queue.length}件（自動で再送します）`);
   $("netInfo").textContent = msgs.join("　／　");
 }
