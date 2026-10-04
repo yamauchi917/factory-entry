@@ -11,6 +11,8 @@
 const TZ = 'Asia/Tokyo';
 const SHEET_EMP = '従業員';
 const SHEET_LOG = '入退室ログ';
+const SHEET_DAILY = '日別回数';
+const SHEET_CHECK = '要確認';
 const FOLDER_NAME = '入退室写真';
 const KEEP_DAYS = 90;   // 写真の保存日数（これより古い写真は自動でゴミ箱へ）
 const PAGE_URL = 'https://yamauchi917.github.io/factory-entry/';
@@ -27,6 +29,7 @@ function setup() {
   emp.getRange('E:E').setNumberFormat('yyyy/MM/dd HH:mm:ss');
   log.getRange('A:A').setNumberFormat('yyyy/MM/dd HH:mm:ss');
   log.getRange('I:I').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  setupSummarySheets_(ss);
 
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('TOKEN')) {
@@ -60,6 +63,27 @@ function makeIpadLink() {
   Logger.log('合言葉（トークン）：' + token);
   Logger.log('iPadの設定用リンク（このリンクは他の人に教えないでください）：');
   Logger.log(PAGE_URL + '#gas=' + encodeURIComponent(url) + '&token=' + token);
+}
+
+/**
+ * 集計用のシート（ログから自動で計算されるので、手で入力しない）
+ *  - 日別回数：日付・氏名ごとの入室回数と退室回数（深夜の自動退室は数えない）
+ *  - 要確認　：押し忘れの可能性がある記録の一覧
+ */
+function setupSummarySheets_(ss) {
+  const log = `'${SHEET_LOG}'`;
+  const daily = ss.getSheetByName(SHEET_DAILY) || ss.insertSheet(SHEET_DAILY);
+  daily.getRange('A1').setFormula(
+    `=QUERY(${log}!A:E,"select toDate(A), C, count(B) where D <> '' and E <> '-' ` +
+    `group by toDate(A), C pivot D order by toDate(A) desc ` +
+    `label toDate(A) '日付', C '氏名', count(B) '' format toDate(A) 'yyyy/MM/dd'",1)`);
+  daily.setFrozenRows(1);
+
+  const check = ss.getSheetByName(SHEET_CHECK) || ss.insertSheet(SHEET_CHECK);
+  check.getRange('A1').setFormula(
+    `=QUERY(${log}!A:G,"select A, C, D, G where G <> '' order by A desc",1)`);
+  check.getRange('A:A').setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  check.setFrozenRows(1);
 }
 
 function getOrCreateSheet_(ss, name, header) {
@@ -142,7 +166,7 @@ function punch_(req) {
 
     const notes = [];
     if (req.note) notes.push(req.note);
-    if (type === '入室' && current === '入室') notes.push('二重入室');
+    if (!req.note && type === '入室' && current === '入室') notes.push('退室記録なし');
 
     let photoUrl = '';
     if (req.photo) photoUrl = savePhoto_(req.photo, time, name, type);
