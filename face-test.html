@@ -8,8 +8,9 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: #111; color: #eee; font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif; }
   header { padding: 12px 16px; font-size: 20px; font-weight: bold; }
-  #wrap { position: relative; width: 100%; max-width: 900px; margin: 0 auto; }
-  video, #shot { width: 100%; display: block; border-radius: 12px; background: #000; }
+  #wrap { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; }
+  /* 縦向きでも画面に収まるよう、高さを画面の6割までに抑える */
+  video, #shot { display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; margin: 0 auto; border-radius: 12px; background: #000; }
   video { transform: scaleX(-1); }               /* 鏡のように表示 */
   #frame { position: absolute; inset: 0; border: 8px solid #666; border-radius: 12px; pointer-events: none; transition: border-color .15s; }
   #frame.ok { border-color: #2ecc71; }
@@ -214,8 +215,9 @@ function judge(res, now) {
 
 function capture(how) {
   running = false;
-  // 横幅640pxに縮小してJPEG化（ドライブ保存用のサイズ）
-  const w = 640, h = Math.round(video.videoHeight * w / video.videoWidth);
+  // 長い辺を640pxに縮小してJPEG化（ドライブ保存用のサイズ）。縦向き・横向きどちらでも同じくらいの容量になる
+  const scale = 640 / Math.max(video.videoWidth, video.videoHeight);
+  const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   c.getContext("2d").drawImage(video, 0, 0, w, h);
