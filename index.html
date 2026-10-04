@@ -160,6 +160,7 @@ let token = store.get("gasToken", "");
 let employees = store.get("employees", []);   // [{id, name, kana, status:'in'|'out'}]
 let queue = store.get("queue", []);           // 未送信の記録
 let netError = "";
+let netDetail = "";   // 原因調査用の詳しい内容
 
 // 設定用リンク（#gas=...&token=...）で開かれたら、設定を保存してリンクを消す
 (function readSetupLink() {
@@ -239,13 +240,19 @@ $("outBtn").onclick = () => openList("out");
 
 // ================================================================ 名前の一覧
 let mode = "in";
-function openList(m) {
+async function openList(m) {
   mode = m;
   requestWakeLock();
   if (!employees.length) {
-    modal(gasUrl ? "従業員の一覧を読み込めていません。\n通信を確認してください。" : "設定が済んでいません。", [{ label: "閉じる" }]);
-    refreshEmployees();
-    return;
+    if (!gasUrl || !token) { modal("設定が済んでいません。", [{ label: "閉じる" }]); return; }
+    await refreshEmployees();
+    if (!employees.length) {
+      modal(netError
+        ? `従業員の一覧を読み込めません。\n（${netError}${netDetail ? "：" + netDetail : ""}）`
+        : "従業員が登録されていません。\nスプレッドシートの「従業員」シートに\n入力してください。",
+        [{ label: "閉じる" }]);
+      return;
+    }
   }
   $("listHead").textContent = m === "in" ? "入室：自分の名前をタップ" : "退室：自分の名前をタップ";
   $("listHead").className = m === "in" ? "in-mode" : "out-mode";
@@ -446,7 +453,14 @@ async function api(body) {
     headers: { "Content-Type": "text/plain;charset=utf-8" },   // この形式だとGASに直接送れる
     body: JSON.stringify({ ...body, token }),
   });
-  return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch {
+    // JSONでない＝Googleのログイン画面などが返ってきている
+    throw new Error(/accounts\.google|ログイン|Sign in/i.test(text)
+      ? "Googleのログイン画面が返りました（デプロイの「アクセスできるユーザー」を確認）"
+      : `想定外の応答（${res.status}）`);
+  }
 }
 
 let sending = false;
@@ -479,14 +493,15 @@ async function refreshEmployees() {
   if (!gasUrl || !token) { renderHome(); return; }
   try {
     const res = await api({ action: "list" });
-    if (!res.ok) { netError = res.code === "auth" ? "合言葉（トークン）が違います" : "Google側でエラーが起きました"; return; }
+    if (!res.ok) { netError = res.code === "auth" ? "合言葉（トークン）が違います" : "Google側でエラーが起きました"; netDetail = res.error || ""; return; }
     employees = res.employees;
     // まだ送れていない記録の分を反映
     for (const q of queue) { const e = employees.find(x => x.id === q.id); if (e) e.status = q.type; }
     store.set("employees", employees);
-    netError = "";
-  } catch {
+    netError = ""; netDetail = "";
+  } catch (err) {
     netError = "Googleに接続できません";
+    netDetail = err.message || String(err);
   } finally {
     renderHome();
   }
