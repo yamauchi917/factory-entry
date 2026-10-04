@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>正面判定テスト</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111; color: #eee; font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif; }
+  header { padding: 12px 16px; font-size: 20px; font-weight: bold; }
+  #wrap { position: relative; width: 100%; max-width: 900px; margin: 0 auto; }
+  video, #shot { width: 100%; display: block; border-radius: 12px; background: #000; }
+  video { transform: scaleX(-1); }               /* 鏡のように表示 */
+  #frame { position: absolute; inset: 0; border: 8px solid #666; border-radius: 12px; pointer-events: none; transition: border-color .15s; }
+  #frame.ok { border-color: #2ecc71; }
+  #msg { text-align: center; font-size: 28px; font-weight: bold; padding: 14px; min-height: 64px; }
+  #bar { height: 10px; background: #333; border-radius: 5px; overflow: hidden; margin: 0 16px; }
+  #bar div { height: 100%; width: 0; background: #2ecc71; }
+  .panel { max-width: 900px; margin: 12px auto; padding: 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 16px; }
+  td { padding: 6px 4px; border-bottom: 1px solid #333; }
+  td.v { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: #2ecc71; } .bad { color: #e74c3c; }
+  label { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 16px; }
+  input[type=range] { flex: 1; }
+  button { font-size: 22px; padding: 14px 28px; border-radius: 10px; border: 0; background: #2d6cdf; color: #fff; margin: 6px 6px 6px 0; }
+  button.sub { background: #555; }
+  #result { display: none; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>正面判定・自動撮影テスト</header>
+
+<div id="live">
+  <div id="wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="frame"></div>
+  </div>
+  <div id="msg">準備中…</div>
+  <div id="bar"><div id="barIn"></div></div>
+  <div class="panel">
+    <button id="manualBtn" class="hidden">このまま撮影する</button>
+  </div>
+</div>
+
+<div id="result" class="panel">
+  <img id="shot" alt="撮影した写真">
+  <p id="shotInfo"></p>
+  <button id="againBtn">もう一度テスト</button>
+</div>
+
+<div class="panel">
+  <h3>判定の数値（調整用）</h3>
+  <table>
+    <tr><td>顔の検出</td><td class="v" id="vFace">-</td></tr>
+    <tr><td>顔の検出率（直近3秒）</td><td class="v" id="vRate">-</td></tr>
+    <tr><td>左右の向き</td><td class="v" id="vYaw">-</td></tr>
+    <tr><td>上下の向き</td><td class="v" id="vPitch">-</td></tr>
+    <tr><td>顔の大きさ（画面幅に対する割合）</td><td class="v" id="vSize">-</td></tr>
+    <tr><td>処理速度</td><td class="v" id="vFps">-</td></tr>
+  </table>
+  <label>左右の許容 ±<span id="tYawV"></span>°<input type="range" id="tYaw" min="5" max="40" value="15"></label>
+  <label>上下の許容 ±<span id="tPitchV"></span>°<input type="range" id="tPitch" min="5" max="40" value="20"></label>
+  <label>上下の補正 <span id="tPitchOffV"></span>°<input type="range" id="tPitchOff" min="-30" max="30" value="0"></label>
+  <label>顔の最小サイズ <span id="tSizeV"></span>%<input type="range" id="tSize" min="10" max="60" value="25"></label>
+  <label>正面を続ける時間 <span id="tHoldV"></span>秒<input type="range" id="tHold" min="2" max="20" value="6"></label>
+  <label>手動ボタンを出すまで <span id="tTimeoutV"></span>秒<input type="range" id="tTimeout" min="3" max="20" value="6"></label>
+  <p style="font-size:14px;color:#aaa">※「上下の補正」は、iPadの置き方（見上げる・見下ろす）で「上下の向き」が0にならない時に使います。</p>
+</div>
+
+<script type="module">
+import { FaceLandmarker, FilesetResolver }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const $ = id => document.getElementById(id);
+const video = $("video");
+
+// ---- 調整用スライダー ----
+const T = {};
+const sliders = { tYaw: 1, tPitch: 1, tPitchOff: 1, tSize: 1, tHold: 0.1, tTimeout: 1 };
+for (const [id, scale] of Object.entries(sliders)) {
+  const update = () => { T[id] = Number($(id).value) * scale; $(id + "V").textContent = +(T[id].toFixed(1)); };
+  $(id).addEventListener("input", update); update();
+}
+
+// ---- 状態 ----
+let landmarker = null;
+let running = false;
+let okSince = 0;           // 正面になった時刻（0 = まだ）
+let startedAt = 0;         // 撮影待ちを始めた時刻
+let lastVideoTime = -1;
+let frames = [];           // 直近の検出結果 {t, found}
+let fpsCount = 0, fpsT = performance.now();
+
+function setMsg(text, ok) {
+  $("msg").textContent = text;
+  $("frame").classList.toggle("ok", !!ok);
+}
+
+async function init() {
+  try {
+    setMsg("カメラを起動しています…");
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+  } catch (e) {
+    setMsg("カメラを使えません：" + e.name);
+    console.error(e);
+    return;
+  }
+  try {
+    setMsg("顔判定の準備中…（初回は数秒かかります）");
+    const fileset = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    const opts = (delegate) => ({
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate,
+      },
+      runningMode: "VIDEO",
+      numFaces: 1,
+      minFaceDetectionConfidence: 0.3,   // マスク姿でも見つけやすいよう低めに
+      minFacePresenceConfidence: 0.3,
+      minTrackingConfidence: 0.3,
+      outputFacialTransformationMatrixes: true,
+    });
+    try { landmarker = await FaceLandmarker.createFromOptions(fileset, opts("GPU")); }
+    catch { landmarker = await FaceLandmarker.createFromOptions(fileset, opts("CPU")); }
+  } catch (e) {
+    setMsg("顔判定を読み込めません：" + (e.message || e));
+    console.error(e);
+    return;
+  }
+  start();
+}
+
+function start() {
+  $("result").style.display = "none";
+  $("live").style.display = "";
+  $("manualBtn").classList.add("hidden");
+  okSince = 0;
+  startedAt = performance.now();
+  running = true;
+  requestAnimationFrame(loop);
+}
+
+// 4x4行列（列優先）から顔の向き（度）を求める
+function angles(m) {
+  const r = (i, j) => m[j * 4 + i];
+  const deg = 180 / Math.PI;
+  return {
+    yaw: Math.asin(Math.max(-1, Math.min(1, -r(2, 0)))) * deg,
+    pitch: Math.atan2(r(2, 1), r(2, 2)) * deg,
+  };
+}
+
+function loop() {
+  if (!running) return;
+  const now = performance.now();
+  if (video.currentTime !== lastVideoTime && video.readyState >= 2) {
+    lastVideoTime = video.currentTime;
+    const res = landmarker.detectForVideo(video, now);
+    judge(res, now);
+    fpsCount++;
+  }
+  if (now - fpsT > 1000) { $("vFps").textContent = fpsCount + " 回/秒"; fpsCount = 0; fpsT = now; }
+  requestAnimationFrame(loop);
+}
+
+function judge(res, now) {
+  const found = res.faceLandmarks && res.faceLandmarks.length > 0;
+  frames.push({ t: now, found });
+  frames = frames.filter(f => now - f.t < 3000);
+  $("vRate").textContent = Math.round(100 * frames.filter(f => f.found).length / frames.length) + " %";
+  $("vFace").innerHTML = found ? '<span class="good">あり</span>' : '<span class="bad">なし</span>';
+
+  let ok = false, reason = "顔が見つかりません";
+  if (found) {
+    const lm = res.faceLandmarks[0];
+    const xs = lm.map(p => p.x);
+    const size = (Math.max(...xs) - Math.min(...xs)) * 100;
+    const { yaw, pitch: rawPitch } = angles(res.facialTransformationMatrixes[0].data);
+    const pitch = rawPitch - T.tPitchOff;
+    const yawOk = Math.abs(yaw) <= T.tYaw;
+    const pitchOk = Math.abs(pitch) <= T.tPitch;
+    const sizeOk = size >= T.tSize;
+    $("vYaw").innerHTML = `<span class="${yawOk ? "good" : "bad"}">${yaw.toFixed(1)}°</span>`;
+    $("vPitch").innerHTML = `<span class="${pitchOk ? "good" : "bad"}">${pitch.toFixed(1)}°</span>`;
+    $("vSize").innerHTML = `<span class="${sizeOk ? "good" : "bad"}">${size.toFixed(0)}%</span>`;
+    if (!sizeOk) reason = "もう少し近づいてください";
+    else if (!yawOk || !pitchOk) reason = "カメラの方を向いてください";
+    else { ok = true; reason = "そのまま…"; }
+  } else {
+    $("vYaw").textContent = $("vPitch").textContent = $("vSize").textContent = "-";
+  }
+
+  if (ok) {
+    if (!okSince) okSince = now;
+    const p = Math.min(1, (now - okSince) / (T.tHold * 1000));
+    $("barIn").style.width = (p * 100) + "%";
+    setMsg(reason, true);
+    if (p >= 1) capture("自動");
+  } else {
+    okSince = 0;
+    $("barIn").style.width = "0";
+    setMsg(reason, false);
+  }
+  if (running && now - startedAt > T.tTimeout * 1000) $("manualBtn").classList.remove("hidden");
+}
+
+function capture(how) {
+  running = false;
+  // 横幅640pxに縮小してJPEG化（ドライブ保存用のサイズ）
+  const w = 640, h = Math.round(video.videoHeight * w / video.videoWidth);
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(video, 0, 0, w, h);
+  const dataUrl = c.toDataURL("image/jpeg", 0.7);
+  const kb = Math.round(dataUrl.length * 3 / 4 / 1024);
+  const sec = ((performance.now() - startedAt) / 1000).toFixed(1);
+  $("shot").src = dataUrl;
+  $("shotInfo").textContent = `撮影方法：${how}　／　撮影までの時間：${sec}秒　／　サイズ：約${kb}KB（${w}×${h}）`;
+  $("live").style.display = "none";
+  $("result").style.display = "block";
+}
+
+$("manualBtn").onclick = () => capture("手動");
+$("againBtn").onclick = start;
+init();
+</script>
+</body>
+</html>
