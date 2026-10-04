@@ -11,7 +11,9 @@
   #wrap { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; }
   /* 縦向きでも画面に収まるよう、高さを画面の6割までに抑える */
   video, #shot { display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; margin: 0 auto; border-radius: 12px; background: #000; }
-  video { transform: scaleX(-1); }               /* 鏡のように表示 */
+  /* 横向きのときは映像を大きめに（案内の文字までは画面に収まる高さ） */
+  @media (orientation: landscape) { video, #shot { max-height: 70vh; } }
+  video { transform: scaleX(-1); }              /* 鏡のように表示 */
   #frame { position: absolute; inset: 0; border: 8px solid #666; border-radius: 12px; pointer-events: none; transition: border-color .15s; }
   #frame.ok { border-color: #2ecc71; }
   #msg { text-align: center; font-size: 28px; font-weight: bold; padding: 14px; min-height: 64px; }
