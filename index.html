@@ -105,8 +105,8 @@
   <div id="greet"></div>
   <div id="tip"></div>
   <div id="homeBtns">
-    <button class="big in-color" id="inBtn">入室<small>今日もがんばろう</small></button>
-    <button class="big out-color" id="outBtn">退室<small>おつかれさまでした</small></button>
+    <button class="big in-color" id="inBtn">入室</button>
+    <button class="big out-color" id="outBtn">退室</button>
   </div>
   <div id="homeInfo"></div>
   <div id="netInfo"></div>
@@ -245,13 +245,13 @@ function hideModal() { $("modal").classList.remove("show"); }
 // 前向きな気分になれるように：時間帯のあいさつ・今日のひとこと・完了時のメッセージ
 const TIPS = [
   "🧼 手洗いは、指先・爪のあいだまでていねいに",
-  "😊 あいさつは、元気のはじまり",
+  "👋 あいさつは、元気のはじまり",
   "🍱 今日の一品が、だれかの笑顔になります",
   "💡 ヒヤリ・ハットは宝もの。気づいたら教えてください",
   "💧 こまめな水分補給を忘れずに",
   "🧹 整理・整頓・清掃・清潔・しつけ",
   "🤝 困ったときは、まわりに声をかけよう",
-  "👀 小さな気づきが、大きな安心につながります",
+  "🔍 小さな気づきが、大きな安心につながります",
   "🌱 昨日より、ちょっとだけ上手に",
   "🙌 ありがとうを、言葉にしよう",
   "🎯 確認は、指さし・声出しで",
@@ -321,7 +321,7 @@ function showDone(emp, type) {
   store.set("today", t);
 
   $("done").className = "screen " + type;
-  $("doneIcon").textContent = type === "in" ? pick(["💪", "✨", "🌟", "😊", "🙌"]) : pick(["🍵", "🌙", "👏", "😌", "🎉"]);
+  $("doneIcon").textContent = type === "in" ? pick(["💪", "✨", "🌟", "🙌"]) : pick(["🍵", "🌙", "👏", "🎉"]);
   $("doneName").textContent = `${emp.name} さん`;
   $("doneType").textContent = type === "in" ? HELLO[timeZone(now.getHours())] : "おつかれさまです！";
   $("doneType").style.color = type === "in" ? "#1d4ed8" : "#374151";
