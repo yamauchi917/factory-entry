@@ -16,6 +16,8 @@ const SHEET_CHECK = '要確認';
 const FOLDER_NAME = '入退室写真';
 const KEEP_DAYS = 90;   // 写真の保存日数（これより古い写真は自動でゴミ箱へ）
 const PAGE_URL = 'https://yamauchi917.github.io/factory-entry/';
+// ウェブアプリのURL（「デプロイ」→「デプロイを管理」に出る、最後が /exec のもの）
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwSgMaylQL7XtzeZLxoRSs16hQK9pqkI_6P0VulHGJWR_xkLjwoX6c1_dvcAM3W_uio/exec';
 
 const EMP_HEADER = ['社員ID', '氏名', 'ふりがな', '状態', '最終更新'];
 const LOG_HEADER = ['日時', '社員ID', '氏名', '区分', '撮影方法', '写真', '備考', '受付ID', '受信日時'];
@@ -53,11 +55,12 @@ function setup() {
 
 /** デプロイ後に実行：iPadの設定用リンクを表示する */
 function makeIpadLink() {
-  // 会社のアカウントだと …/a/macros/ドメイン/… の形になり、ログインしていないiPadからつながらないので直す
-  const url = (ScriptApp.getService().getUrl() || '').replace(/\/a\/macros\/[^/]+\//, '/macros/');
+  // エディタから実行すると、テスト用のURL（…/dev）や会社アカウント用のURL（…/a/ドメイン/…）が返ってくることがあり、
+  // ログインしていないiPadからはつながらない。そのため「デプロイを管理」に出る …/exec のURLを WEB_APP_URL に書いておく
+  const url = WEB_APP_URL;
   const token = PropertiesService.getScriptProperties().getProperty('TOKEN');
-  if (!url || !token) {
-    Logger.log('先に setup を実行し、ウェブアプリとしてデプロイしてください。');
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url) || !token) {
+    Logger.log('先に setup を実行し、「デプロイを管理」に出る …/exec のURLを、このファイルの上のほうの WEB_APP_URL に書いてください。');
     return;
   }
   Logger.log('ウェブアプリのURL：' + url);
