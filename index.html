@@ -616,7 +616,9 @@ async function refreshEmployees() {
   try {
     const res = await api({ action: "list" });
     if (!res.ok) { netError = res.code === "auth" ? "合言葉（トークン）が違います" : "Google側でエラーが起きました"; netDetail = res.error || ""; return; }
-    employees = res.employees;
+    // ふりがなのあいうえお順（カタカナ・半角カナもひらがなとして並べる）
+    const yomi = e => (e.kana || e.name).normalize("NFKC").replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+    employees = res.employees.sort((a, b) => yomi(a).localeCompare(yomi(b), "ja"));
     // まだ送れていない記録の分を反映
     for (const q of queue) { const e = employees.find(x => x.id === q.id); if (e) e.status = q.type; }
     store.set("employees", employees);
