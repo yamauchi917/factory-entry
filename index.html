@@ -448,11 +448,21 @@ function record(emp, type, method, note, photo) {
 
 // ================================================================ Googleとの通信
 async function api(body) {
-  const res = await fetch(gasUrl, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },   // この形式だとGASに直接送れる
-    body: JSON.stringify({ ...body, token }),
-  });
+  // Safariは開いた直後などに一時的に失敗（Load failed）することがあるので、少し待って2回までやり直す
+  let res;
+  for (let i = 0; ; i++) {
+    try {
+      res = await fetch(gasUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },   // この形式だとGASに直接送れる
+        body: JSON.stringify({ ...body, token }),
+      });
+      break;
+    } catch (err) {
+      if (i >= 2) throw err;
+      await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
   const text = await res.text();
   try { return JSON.parse(text); }
   catch {
@@ -540,6 +550,10 @@ initFace();
 refreshEmployees().then(sendQueue);
 setInterval(() => { if ($("home").classList.contains("active")) refreshEmployees(); }, CFG.refreshMs);
 setInterval(sendQueue, CFG.retryMs);
+// 画面を開き直したとき・ほかのアプリから戻ったときは、すぐにつなぎ直す
+function reconnect() { if (document.visibilityState === "visible" && gasUrl && token) refreshEmployees().then(sendQueue); }
+document.addEventListener("visibilitychange", reconnect);
+window.addEventListener("pageshow", e => { if (e.persisted) reconnect(); });
 window.addEventListener("online", sendQueue);
 </script>
 </body>

@@ -53,7 +53,8 @@ function setup() {
 
 /** デプロイ後に実行：iPadの設定用リンクを表示する */
 function makeIpadLink() {
-  const url = ScriptApp.getService().getUrl();
+  // 会社のアカウントだと …/a/macros/ドメイン/… の形になり、ログインしていないiPadからつながらないので直す
+  const url = (ScriptApp.getService().getUrl() || '').replace(/\/a\/macros\/[^/]+\//, '/macros/');
   const token = PropertiesService.getScriptProperties().getProperty('TOKEN');
   if (!url || !token) {
     Logger.log('先に setup を実行し、ウェブアプリとしてデプロイしてください。');
