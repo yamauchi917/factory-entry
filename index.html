@@ -18,11 +18,26 @@
   #clock .time { font-size: 72px; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1.1; }
   #clock .date { font-size: 24px; color: #555; }
   #homeBtns { flex: 1; display: flex; gap: 32px; align-items: center; justify-content: center; }
-  .big { width: 38%; height: 52%; font-size: 64px; font-weight: bold; color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.15); }
+  .big { width: 38%; height: 52%; font-size: 64px; font-weight: bold; color: #fff; box-shadow: 0 8px 20px rgba(0,0,0,.18); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+  .big small { font-size: 22px; font-weight: normal; opacity: .9; }
   .in-color { background: #1f6feb; }
   .out-color { background: #4b5563; }
+  #home .in-color { background: linear-gradient(160deg, #3b82f6, #1d4ed8); }
+  #home .out-color { background: linear-gradient(160deg, #6b7280, #374151); }
   #homeInfo { text-align: center; font-size: 22px; color: #333; }
   #netInfo { text-align: center; font-size: 16px; color: #b45309; min-height: 22px; margin-top: 4px; }
+
+  /* 最初の画面：時間帯で背景が変わる */
+  #home.morning { background: linear-gradient(180deg, #ffe7c2 0%, #fff6e6 45%, #e6f2ff 100%); }
+  #home.day     { background: linear-gradient(180deg, #cfe8ff 0%, #eef7ff 55%, #f7fbff 100%); }
+  #home.evening { background: linear-gradient(180deg, #ffc9a8 0%, #ffe3d1 50%, #f3e8ff 100%); }
+  #home.night   { background: linear-gradient(180deg, #1e2a4a 0%, #2d3a63 60%, #3b4a7a 100%); }
+  #home.night #clock .time, #home.night #greet, #home.night #homeInfo { color: #fff; }
+  #home.night #clock .date { color: #cbd5e1; }
+  #home.night #netInfo { color: #fcd34d; }
+  #home.night #tip { background: rgba(255,255,255,.12); color: #e2e8f0; }
+  #greet { text-align: center; font-size: 30px; font-weight: bold; margin-top: 6px; color: #1f2937; }
+  #tip { margin: 10px auto 0; padding: 10px 22px; border-radius: 999px; background: rgba(255,255,255,.75); font-size: 20px; color: #374151; max-width: 90%; text-align: center; }
 
   /* 名前の一覧 */
   .bar { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
@@ -49,9 +64,21 @@
   #manualBtn { font-size: 26px; padding: 16px 36px; background: #1f6feb; color: #fff; }
 
   /* 完了 */
-  #done { align-items: center; justify-content: center; text-align: center; }
-  #doneName { font-size: 56px; font-weight: bold; }
-  #doneType { font-size: 72px; font-weight: bold; margin-top: 12px; }
+  #done { align-items: center; justify-content: center; text-align: center; overflow: hidden; }
+  #done.in  { background: linear-gradient(180deg, #fff7e0, #ffffff 60%); }
+  #done.out { background: linear-gradient(180deg, #e8ecf8, #ffffff 60%); }
+  #doneIcon { font-size: 90px; line-height: 1; animation: pop .5s ease-out; }
+  #doneName { font-size: 52px; font-weight: bold; margin-top: 8px; }
+  #doneType { font-size: 64px; font-weight: bold; margin-top: 6px; }
+  #doneMsg  { font-size: 32px; margin-top: 14px; color: #374151; }
+  #doneBadge { display: inline-block; margin-top: 18px; padding: 8px 24px; border-radius: 999px; font-size: 26px; font-weight: bold; background: #fff3c4; color: #92400e; }
+  #doneBadge:empty { display: none; }
+  #done.out #doneBadge { background: #e0e7ff; color: #3730a3; }
+  @keyframes pop { 0% { transform: scale(.3); opacity: 0; } 70% { transform: scale(1.15); } 100% { transform: scale(1); opacity: 1; } }
+  .confetti { position: absolute; top: -30px; width: 12px; height: 18px; border-radius: 3px; animation: fall linear forwards; pointer-events: none; }
+  .confetti.star { width: auto; height: auto; background: none; font-size: 26px; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+  @media (prefers-reduced-motion: reduce) { .confetti { display: none; } #doneIcon { animation: none; } }
 
   /* お知らせ（すでに入室中です 等） */
   #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); align-items: center; justify-content: center; z-index: 10; }
@@ -75,9 +102,11 @@
 <!-- 最初の画面 -->
 <section id="home" class="screen">
   <div id="clock"><div class="time" id="time">--:--</div><div class="date" id="date"></div></div>
+  <div id="greet"></div>
+  <div id="tip"></div>
   <div id="homeBtns">
-    <button class="big in-color" id="inBtn">入室</button>
-    <button class="big out-color" id="outBtn">退室</button>
+    <button class="big in-color" id="inBtn">入室<small>今日もがんばろう</small></button>
+    <button class="big out-color" id="outBtn">退室<small>おつかれさまでした</small></button>
   </div>
   <div id="homeInfo"></div>
   <div id="netInfo"></div>
@@ -107,8 +136,11 @@
 
 <!-- 完了 -->
 <section id="done" class="screen">
+  <div id="doneIcon"></div>
   <div id="doneName"></div>
   <div id="doneType"></div>
+  <div id="doneMsg"></div>
+  <div><span id="doneBadge"></span></div>
 </section>
 
 <!-- 設定（時計を5回続けてタップすると開く） -->
@@ -140,7 +172,7 @@ const CFG = {
   minSize: 20,          // 顔の最小サイズ（映像の横幅に対する%）
   holdMs: 600,          // 正面をこの時間続けたら撮影
   manualAfterMs: 6000,  // この時間で撮れなければ「撮影する」ボタンを出す
-  doneMs: 2500,         // 完了画面を表示する時間
+  doneMs: 3500,         // 完了画面を表示する時間
   idleMs: 30000,        // 一覧・撮影画面で操作がなければ最初の画面へ戻る
   refreshMs: 60000,     // 一覧をGoogleから読み直す間隔
   retryMs: 15000,       // 送れなかった記録を再送する間隔
@@ -210,10 +242,97 @@ function modal(text, buttons = [], autoCloseMs = 0) {
 function hideModal() { $("modal").classList.remove("show"); }
 
 // ================================================================ 最初の画面
+// 前向きな気分になれるように：時間帯のあいさつ・今日のひとこと・完了時のメッセージ
+const TIPS = [
+  "🧼 手洗いは、指先・爪のあいだまでていねいに",
+  "😊 あいさつは、元気のはじまり",
+  "🍱 今日の一品が、だれかの笑顔になります",
+  "💡 ヒヤリ・ハットは宝もの。気づいたら教えてください",
+  "💧 こまめな水分補給を忘れずに",
+  "🧹 整理・整頓・清掃・清潔・しつけ",
+  "🤝 困ったときは、まわりに声をかけよう",
+  "👀 小さな気づきが、大きな安心につながります",
+  "🌱 昨日より、ちょっとだけ上手に",
+  "🙌 ありがとうを、言葉にしよう",
+  "🎯 確認は、指さし・声出しで",
+  "☕ 休けいは、しっかり休むのも仕事のうち",
+];
+const IN_MSGS = ["今日もよろしくお願いします！", "いい一日になりますように", "今日も安全第一で！", "笑顔でいきましょう！", "無理せず、いきましょう", "チームワークで乗り切ろう！", "おいしいものを届けましょう"];
+const OUT_MSGS = ["今日もありがとうございました", "ゆっくり休んでくださいね", "気をつけて帰ってくださいね", "明日もよろしくお願いします", "よくがんばりました！"];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const ymd = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+
+function timeZone(h) { return h >= 5 && h < 10 ? "morning" : h >= 10 && h < 16 ? "day" : h >= 16 && h < 19 ? "evening" : "night"; }
+const HELLO = { morning: "おはようございます！", day: "こんにちは！", evening: "こんばんは！", night: "こんばんは！" };
+function greeting(d) {
+  const z = timeZone(d.getHours());
+  const icon = { morning: "☀️", day: "🌤", evening: "🌇", night: "🌙" }[z];
+  const wd = d.getDay();
+  const extra = wd === 1 ? "新しい一週間のはじまりです" : wd === 5 ? "金曜日！あと少しです" : wd === 0 || wd === 6 ? "休日出勤、ありがとうございます" : "今日もご安全に";
+  return `${icon} ${HELLO[z]}${extra}`;
+}
+
 function tick() {
   const d = new Date();
   $("time").textContent = d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
   $("date").textContent = d.toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+  const z = timeZone(d.getHours());
+  if (!$("home").classList.contains(z)) {
+    $("home").classList.remove("morning", "day", "evening", "night");
+    $("home").classList.add(z);
+  }
+  $("greet").textContent = greeting(d);
+  // ひとことは1日ごとに変わる
+  const n = Math.floor((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(2026, 0, 1)) / 86400000);
+  $("tip").textContent = TIPS[((n % TIPS.length) + TIPS.length) % TIPS.length];
+}
+
+// 今日の入室の順番と入室時刻（この端末で記録したもの。日付が変わったらリセット）
+function todayLog() {
+  const t = store.get("today", null);
+  return t && t.date === ymd(new Date()) ? t : { date: ymd(new Date()), count: 0, inAt: {} };
+}
+
+function confetti(type) {
+  const box = $("done");
+  box.querySelectorAll(".confetti").forEach(c => c.remove());
+  const colors = ["#f59f00", "#3b82f6", "#22c55e", "#ef4444", "#a855f7", "#ec4899"];
+  for (let i = 0; i < (type === "in" ? 40 : 14); i++) {
+    const c = document.createElement("div");
+    c.className = "confetti" + (type === "in" ? "" : " star");
+    if (type === "in") c.style.background = colors[i % colors.length];
+    else c.textContent = pick(["⭐", "✨", "🌙"]);
+    c.style.left = Math.random() * 100 + "vw";
+    c.style.animationDuration = (type === "in" ? 1.8 : 3) + Math.random() * 1.5 + "s";
+    c.style.animationDelay = Math.random() * 0.4 + "s";
+    box.appendChild(c);
+    setTimeout(() => c.remove(), 5000);
+  }
+}
+
+function showDone(emp, type) {
+  const now = new Date();
+  const t = todayLog();
+  let badge = "";
+  if (type === "in") {
+    if (!t.inAt[emp.id]) { t.count++; badge = t.count === 1 ? "🏆 今日の一番乗り！" : `今日 ${t.count}人目`; }
+    t.inAt[emp.id] = now.toISOString();
+  } else if (t.inAt[emp.id]) {
+    const min = Math.round((now - new Date(t.inAt[emp.id])) / 60000);
+    const h = Math.floor(min / 60);
+    if (min >= 1) badge = `今日は ${h ? h + "時間" : ""}${min % 60}分 がんばりました`;
+  }
+  store.set("today", t);
+
+  $("done").className = "screen " + type;
+  $("doneIcon").textContent = type === "in" ? pick(["💪", "✨", "🌟", "😊", "🙌"]) : pick(["🍵", "🌙", "👏", "😌", "🎉"]);
+  $("doneName").textContent = `${emp.name} さん`;
+  $("doneType").textContent = type === "in" ? HELLO[timeZone(now.getHours())] : "おつかれさまでした！";
+  $("doneType").style.color = type === "in" ? "#1d4ed8" : "#374151";
+  $("doneMsg").textContent = (type === "in" ? "入室を記録しました。" : "退室を記録しました。") + pick(type === "in" ? IN_MSGS : OUT_MSGS);
+  $("doneBadge").textContent = badge;
+  show("done");
+  confetti(type);
 }
 setInterval(tick, 1000); tick();
 
@@ -438,10 +557,7 @@ function record(emp, type, method, note, photo) {
   if (e) e.status = type;
   store.set("employees", employees);
 
-  $("doneName").textContent = `${emp.name} さん`;
-  $("doneType").textContent = type === "in" ? "入室しました" : "退室しました";
-  $("doneType").style.color = type === "in" ? "#1f6feb" : "#374151";
-  show("done");
+  showDone(emp, type);
   setTimeout(() => { if ($("done").classList.contains("active")) goHome(); }, CFG.doneMs);
   sendQueue();
 }
