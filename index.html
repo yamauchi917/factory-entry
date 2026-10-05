@@ -258,7 +258,7 @@ const TIPS = [
   "☕ 休けいは、しっかり休むのも仕事のうち",
 ];
 const IN_MSGS = ["今日もよろしくお願いします！", "いい一日になりますように", "今日も安全第一で！", "笑顔でいきましょう！", "無理せず、いきましょう", "チームワークで乗り切ろう！", "おいしいものを届けましょう"];
-const OUT_MSGS = ["今日もありがとうございました", "ゆっくり休んでくださいね", "気をつけて帰ってくださいね", "明日もよろしくお願いします", "よくがんばりました！"];
+const OUT_MSGS = ["ありがとうございました", "ひと息ついてくださいね", "水分補給も忘れずに", "いつもありがとうございます", "よくがんばりました！"];
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const ymd = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
@@ -317,17 +317,13 @@ function showDone(emp, type) {
   if (type === "in") {
     if (!t.inAt[emp.id]) { t.count++; badge = t.count === 1 ? "🏆 今日の一番乗り！" : `今日 ${t.count}人目`; }
     t.inAt[emp.id] = now.toISOString();
-  } else if (t.inAt[emp.id]) {
-    const min = Math.round((now - new Date(t.inAt[emp.id])) / 60000);
-    const h = Math.floor(min / 60);
-    if (min >= 1) badge = `今日は ${h ? h + "時間" : ""}${min % 60}分 がんばりました`;
   }
   store.set("today", t);
 
   $("done").className = "screen " + type;
   $("doneIcon").textContent = type === "in" ? pick(["💪", "✨", "🌟", "😊", "🙌"]) : pick(["🍵", "🌙", "👏", "😌", "🎉"]);
   $("doneName").textContent = `${emp.name} さん`;
-  $("doneType").textContent = type === "in" ? HELLO[timeZone(now.getHours())] : "おつかれさまでした！";
+  $("doneType").textContent = type === "in" ? HELLO[timeZone(now.getHours())] : "おつかれさまです！";
   $("doneType").style.color = type === "in" ? "#1d4ed8" : "#374151";
   $("doneMsg").textContent = (type === "in" ? "入室を記録しました。" : "退室を記録しました。") + pick(type === "in" ? IN_MSGS : OUT_MSGS);
   $("doneBadge").textContent = badge;
