@@ -57,7 +57,6 @@
   .name { height: 66px; font-size: 26px; background: #fff; color: #111; border: 2px solid #d1d5db; font-weight: bold; padding: 0 4px; }
   #names.compact .name { height: 56px; font-size: 24px; }   /* 1画面に収まらないときだけ少し小さくする */
   .name.in { color: #e67700; border-color: #f59f00; background: #fff7e6; }
-  .name.visitor { grid-column: span 2; font-size: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
   .name.add { grid-column: span 2; font-size: 24px; background: #f9fafb; color: #374151; border: 2px dashed #9ca3af; }
 
   /* その他の方：会社名とお名前の入力 */
@@ -176,7 +175,7 @@
 <!-- その他の方：会社名とお名前の入力 -->
 <section id="visitor" class="screen">
   <div class="bar">
-    <h1 class="in-mode" style="color:#1f6feb">その他の方：会社名とお名前を入力</h1>
+    <h1 id="visitorHead"></h1>
     <button class="back" id="visitorBack">やめる</button>
   </div>
   <div id="vForm">
@@ -185,7 +184,7 @@
     <label for="vName">お名前</label>
     <input id="vName" type="text" autocomplete="off" maxlength="40">
     <div id="vMsg"></div>
-    <button id="vNext" class="in-color">次へ（健康チェック）</button>
+    <button id="vNext" class="in-color">次へ</button>
   </div>
 </section>
 
@@ -476,7 +475,7 @@ async function openList(m) {
   refreshEmployees().then(() => { if ($("list").classList.contains("active")) renderNames(); });
 }
 
-// 社員（青枠）→ パート（ピンク枠）→ 区分が未入力の人（枠なし）→ その他の方（枠なし・最後）。どれもあいうえお順
+// 社員（青枠）→ パート（ピンク枠）→ 区分が未入力の人（枠なし）→「その他の方」ボタン（枠なし・最後）。どれもあいうえお順
 function renderNames() {
   const box = $("names"); box.innerHTML = "";
   const group = (cls, people) => {
@@ -489,15 +488,14 @@ function renderNames() {
     const people = employees.filter(test);
     if (people.length) box.appendChild(group(cls, people));
   }
-  const g = group("other", visitors.map(visitorPerson));
-  if (mode === "in") {
-    const add = document.createElement("button");
-    add.className = "name add";
-    add.textContent = "＋ その他の方";
-    add.onclick = openVisitorForm;
-    g.appendChild(add);
-  }
-  if (g.children.length) box.appendChild(g);
+  // その他の方は名前のボタンを作らず、入室・退室とも会社名とお名前を入力してもらう
+  const g = group("other", []);
+  const add = document.createElement("button");
+  add.className = "name add";
+  add.textContent = "その他の方";
+  add.onclick = openVisitorForm;
+  g.appendChild(add);
+  box.appendChild(g);
   fitNames();
 }
 
@@ -510,8 +508,8 @@ function fitNames() {
 
 function nameButton(e) {
   const b = document.createElement("button");
-  b.className = "name" + (e.isVisitor ? " visitor" : "") + (e.status === "in" ? " in" : "");
-  b.textContent = e.isVisitor ? `${e.name}（${e.company}）` : e.name;
+  b.className = "name" + (e.status === "in" ? " in" : "");
+  b.textContent = e.name;
   b.onclick = () => pickName(e);
   return b;
 }
@@ -549,6 +547,9 @@ $("listBack").onclick = goHome;
 
 // ================================================================ その他の方（業者・来客など）
 function openVisitorForm() {
+  $("visitorHead").textContent = `その他の方（${mode === "in" ? "入室" : "退室"}）：会社名とお名前を入力`;
+  $("visitorHead").className = mode === "in" ? "in-mode" : "out-mode";
+  $("vNext").className = mode === "in" ? "in-color" : "out-color";
   $("vCompany").value = "";
   $("vName").value = "";
   $("vMsg").textContent = "";
@@ -561,11 +562,13 @@ $("vNext").onclick = () => {
   const name = $("vName").value.trim();
   if (!company || !name) { $("vMsg").textContent = "会社名とお名前を入力してください"; return; }
   document.activeElement && document.activeElement.blur();   // キーボードを閉じる
-  // 今日すでに来ている同じ人なら、その記録の続きとして扱う
-  const same = visitors.find(v => v.company === company && v.name === name);
+  // 今日すでに来ている同じ人（会社名・お名前が同じ。空白や全角・半角の違いは無視）なら、その人の記録として扱う
+  //  入室中の人の退室／退室した人の再入室（健康チェックは1日1回）。見つからなければ新しい人
+  const key = (c, n) => (c + "|" + n).normalize("NFKC").replace(/\s/g, "");
+  const same = visitors.find(v => key(v.company, v.name) === key(company, name));
   if (same) { pickName(visitorPerson(same)); return; }
   const id = "V" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  proceed(visitorPerson({ id, company, name, status: "out", healthDate: "" }), "in", "");
+  pickName(visitorPerson({ id, company, name, status: "out", healthDate: "" }));
 };
 $("vCompany").addEventListener("keydown", e => { if (e.key === "Enter") $("vName").focus(); });
 $("vName").addEventListener("keydown", e => { if (e.key === "Enter") $("vNext").click(); });
@@ -876,6 +879,11 @@ async function sendQueue() {
       let res;
       try { res = await api({ action: "punch", ...item }); }
       catch { netError = "Googleに接続できません"; break; }
+      // その他の方の記録を「登録されていない社員」と言われた＝Google側が古いまま → 捨てずに取っておく
+      if (res.code === "unknown_employee" && item.visitor) {
+        netError = "Google側が古いままです（GASを新バージョンでデプロイしてください）";
+        break;
+      }
       if (res.ok || res.code === "unknown_employee" || res.code === "bad_request") {
         if (!res.ok) console.warn("記録できなかったため破棄しました", res, item);
         queue.shift();
