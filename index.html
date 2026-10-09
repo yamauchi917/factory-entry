@@ -44,10 +44,29 @@
   .bar h1 { margin: 0; font-size: 34px; flex: 1; }
   .back { font-size: 24px; padding: 14px 28px; background: #d1d5db; color: #111; }
   .legend { font-size: 18px; color: #444; }
+  #list .bar h1 { white-space: nowrap; }
+  #list .legend { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.4; }
   .legend .o { color: #e67700; font-weight: bold; }
-  #names { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; align-content: start; overflow-y: auto; padding-bottom: 12px; }
-  .name { height: 72px; font-size: 26px; background: #fff; color: #111; border: 2px solid #d1d5db; font-weight: bold; }
+  .legend .staff { color: #2563eb; font-weight: bold; }
+  .legend .part { color: #db2777; font-weight: bold; }
+  #names { flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-bottom: 12px; }
+  /* 社員＝青枠、パート＝ピンク枠、その他は枠なしで最後（枠の太さ＋余白をそろえて、ボタンの列が上下でそろうようにする） */
+  .group { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-content: start; padding: 5px; border: 3px solid transparent; border-radius: 20px; }
+  .group.staff { border-color: #3b82f6; }
+  .group.part { border-color: #f472b6; }
+  .name { height: 66px; font-size: 26px; background: #fff; color: #111; border: 2px solid #d1d5db; font-weight: bold; padding: 0 4px; }
+  #names.compact .name { height: 56px; font-size: 24px; }   /* 1画面に収まらないときだけ少し小さくする */
   .name.in { color: #e67700; border-color: #f59f00; background: #fff7e6; }
+  .name.visitor { grid-column: span 2; font-size: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
+  .name.add { grid-column: span 2; font-size: 24px; background: #f9fafb; color: #374151; border: 2px dashed #9ca3af; }
+
+  /* その他の方：会社名とお名前の入力 */
+  #vForm { max-width: 720px; width: 100%; margin: 0 auto; }
+  #vForm label { display: block; font-size: 26px; font-weight: bold; margin: 14px 0 6px; }
+  #vForm input { width: 100%; font-size: 30px; padding: 12px 16px; border: 2px solid #9ca3af; border-radius: 12px; -webkit-user-select: text; user-select: text; }
+  #vForm input:focus { outline: none; border-color: #1f6feb; }
+  #vMsg { font-size: 22px; font-weight: bold; color: #b91c1c; min-height: 32px; margin-top: 10px; text-align: center; }
+  #vNext { display: block; margin: 6px auto 0; font-size: 28px; font-weight: bold; padding: 16px 40px; color: #fff; }
   #listHead.in-mode { color: #1f6feb; }
   #listHead.out-mode { color: #374151; }
 
@@ -148,10 +167,26 @@
 <section id="list" class="screen">
   <div class="bar">
     <h1 id="listHead"></h1>
-    <span class="legend"><span class="o">オレンジ</span>＝入室中　黒＝退室済み</span>
+    <span class="legend"><span><span class="staff">青枠</span>＝社員　<span class="part">ピンク枠</span>＝パート</span><span><span class="o">オレンジ</span>＝入室中　黒＝退室済み</span></span>
     <button class="back" id="listBack">戻る</button>
   </div>
   <div id="names"></div>
+</section>
+
+<!-- その他の方：会社名とお名前の入力 -->
+<section id="visitor" class="screen">
+  <div class="bar">
+    <h1 class="in-mode" style="color:#1f6feb">その他の方：会社名とお名前を入力</h1>
+    <button class="back" id="visitorBack">やめる</button>
+  </div>
+  <div id="vForm">
+    <label for="vCompany">会社名</label>
+    <input id="vCompany" type="text" autocomplete="off" maxlength="60">
+    <label for="vName">お名前</label>
+    <input id="vName" type="text" autocomplete="off" maxlength="40">
+    <div id="vMsg"></div>
+    <button id="vNext" class="in-color">次へ（健康チェック）</button>
+  </div>
 </section>
 
 <!-- 健康チェック（その日最初の打刻のときだけ） -->
@@ -249,7 +284,8 @@ const store = {
 
 let gasUrl = store.get("gasUrl", "");
 let token = store.get("gasToken", "");
-let employees = store.get("employees", []);   // [{id, name, kana, status:'in'|'out'}]
+let employees = store.get("employees", []);   // [{id, name, kana, group:'staff'|'part'|'', status:'in'|'out', healthDate}]
+let visitors = store.get("visitors", []);     // その他の方（今日の分）[{id, company, name, status, healthDate}]
 let queue = store.get("queue", []);           // 未送信の記録
 let netError = "";
 let netDetail = "";   // 原因調査用の詳しい内容
@@ -266,7 +302,7 @@ let netDetail = "";   // 原因調査用の詳しい内容
 
 // ================================================================ 画面の切り替え
 let idleTimer = null;
-const idleMsFor = id => id === "health" ? CFG.healthIdleMs : id === "list" || id === "cam" ? CFG.idleMs : 0;
+const idleMsFor = id => id === "health" || id === "visitor" ? CFG.healthIdleMs : id === "list" || id === "cam" ? CFG.idleMs : 0;
 function show(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
   clearTimeout(idleTimer);
@@ -376,7 +412,7 @@ function showDone(emp, type) {
   const now = new Date();
   const t = todayLog();
   let badge = "";
-  if (type === "in") {
+  if (type === "in" && !emp.isVisitor) {
     if (!t.inAt[emp.id]) { t.count++; badge = t.count === 1 ? "今日の一番乗り！ 🏆" : `今日 ${t.count}人目`; }
     t.inAt[emp.id] = now.toISOString();
   }
@@ -396,7 +432,8 @@ setInterval(tick, 1000); tick();
 
 function renderHome() {
   const n = employees.filter(e => e.status === "in").length;
-  $("homeInfo").textContent = employees.length ? `現在 入室中：${n}人` : "";
+  const v = visitors.filter(e => e.status === "in").length;
+  $("homeInfo").textContent = employees.length ? `現在 入室中：${n}人` + (v ? `（ほか その他の方 ${v}人）` : "") : "";
   const msgs = [];
   if (!gasUrl || !token) msgs.push("設定が済んでいません（時計を5回タップして設定）");
   if (netError) msgs.push(netError + (netDetail ? "（" + netDetail + "）" : ""));
@@ -435,19 +472,52 @@ async function openList(m) {
   $("listHead").className = m === "in" ? "in-mode" : "out-mode";
   renderNames();
   show("list");
+  fitNames();
   refreshEmployees().then(() => { if ($("list").classList.contains("active")) renderNames(); });
 }
 
+// 社員（青枠）→ パート（ピンク枠）→ 区分が未入力の人（枠なし）→ その他の方（枠なし・最後）。どれもあいうえお順
 function renderNames() {
   const box = $("names"); box.innerHTML = "";
-  for (const e of employees) {
-    const b = document.createElement("button");
-    b.className = "name" + (e.status === "in" ? " in" : "");
-    b.textContent = e.name;
-    b.onclick = () => pickName(e);
-    box.appendChild(b);
+  const group = (cls, people) => {
+    const g = document.createElement("div");
+    g.className = "group " + cls;
+    for (const e of people) g.appendChild(nameButton(e));
+    return g;
+  };
+  for (const [cls, test] of [["staff", e => e.group === "staff"], ["part", e => e.group === "part"], ["none", e => !e.group]]) {
+    const people = employees.filter(test);
+    if (people.length) box.appendChild(group(cls, people));
   }
+  const g = group("other", visitors.map(visitorPerson));
+  if (mode === "in") {
+    const add = document.createElement("button");
+    add.className = "name add";
+    add.textContent = "＋ その他の方";
+    add.onclick = openVisitorForm;
+    g.appendChild(add);
+  }
+  if (g.children.length) box.appendChild(g);
+  fitNames();
 }
+
+// 1画面に収まらなければ、ボタンを少し小さくする（一覧が表示されているときだけ測れる）
+function fitNames() {
+  const box = $("names");
+  box.classList.remove("compact");
+  if ($("list").classList.contains("active") && box.scrollHeight > box.clientHeight + 2) box.classList.add("compact");
+}
+
+function nameButton(e) {
+  const b = document.createElement("button");
+  b.className = "name" + (e.isVisitor ? " visitor" : "") + (e.status === "in" ? " in" : "");
+  b.textContent = e.isVisitor ? `${e.name}（${e.company}）` : e.name;
+  b.onclick = () => pickName(e);
+  return b;
+}
+
+// その他の方を、従業員と同じ形で扱えるようにする（isVisitor で見分ける）
+const visitorPerson = v => ({ ...v, isVisitor: true });
 
 function pickName(e) {
   // 前回の退室を押し忘れている（入室中のまま）
@@ -476,6 +546,30 @@ function proceed(e, type, note) {
 }
 
 $("listBack").onclick = goHome;
+
+// ================================================================ その他の方（業者・来客など）
+function openVisitorForm() {
+  $("vCompany").value = "";
+  $("vName").value = "";
+  $("vMsg").textContent = "";
+  show("visitor");
+  setTimeout(() => $("vCompany").focus(), 100);
+}
+
+$("vNext").onclick = () => {
+  const company = $("vCompany").value.trim();
+  const name = $("vName").value.trim();
+  if (!company || !name) { $("vMsg").textContent = "会社名とお名前を入力してください"; return; }
+  document.activeElement && document.activeElement.blur();   // キーボードを閉じる
+  // 今日すでに来ている同じ人なら、その記録の続きとして扱う
+  const same = visitors.find(v => v.company === company && v.name === name);
+  if (same) { pickName(visitorPerson(same)); return; }
+  const id = "V" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  proceed(visitorPerson({ id, company, name, status: "out", healthDate: "" }), "in", "");
+};
+$("vCompany").addEventListener("keydown", e => { if (e.key === "Enter") $("vName").focus(); });
+$("vName").addEventListener("keydown", e => { if (e.key === "Enter") $("vNext").click(); });
+$("visitorBack").onclick = goHome;
 
 // ================================================================ 健康チェック（従事者個人別健康観察記録票）
 const SELF_ITEMS = [
@@ -511,6 +605,7 @@ let hc = null;   // 入力中の健康チェック {emp, type, note, digits, mar
 function openHealth(emp, type, note) {
   hc = { emp, type, note, digits: "", marks: Array(SELF_ITEMS.length + HOUSE_ITEMS.length).fill(""), ng: false };
   $("healthHead").textContent = `${emp.name} さん　今日の健康チェック`;
+  $("tempBox").style.display = emp.isVisitor ? "none" : "";   // その他の方は体温なし
   $("rules").innerHTML = RULES.map(t => `<div>${t}</div>`).join("");
   renderHealth();
   show("health");
@@ -563,15 +658,17 @@ function readTemp() {
 }
 
 function finishHealth(allOk) {
-  const temp = readTemp();
-  if (temp === null) { $("healthMsg").textContent = "体温を入力してください（例：36.4 → 3・6・4）"; return; }
-  if (isNaN(temp)) { $("healthMsg").textContent = "体温をもう一度確かめてください"; return; }
+  const temp = hc.emp.isVisitor ? null : readTemp();
+  if (!hc.emp.isVisitor) {
+    if (temp === null) { $("healthMsg").textContent = "体温を入力してください（例：36.4 → 3・6・4）"; return; }
+    if (isNaN(temp)) { $("healthMsg").textContent = "体温をもう一度確かめてください"; return; }
+  }
   const marks = allOk ? hc.marks.map(() => "○") : hc.marks.map(m => m || "○");
   const health = { temp, marks };
   const { emp, type, note } = hc;
   const go = () => startCapture(emp, type, note, health);
-  if (marks.includes("×") || temp >= CFG.feverTemp) {
-    let text = "上司に報告し、\n指示を受けてください。";
+  if (marks.includes("×") || (temp !== null && temp >= CFG.feverTemp)) {
+    let text = hc.emp.isVisitor ? "受付の担当者に伝え、\n指示を受けてください。" : "上司に報告し、\n指示を受けてください。";
     if (marks[WOUND] === "×") text += "\n\n手指・腕・顔面に傷や化膿創がある場合は、\n調理作業はできません。";
     modal(text, [{ label: "わかりました（撮影へ）", cls: "in-color", onClick: go }]);
     return;
@@ -721,18 +818,25 @@ function record(emp, type, method, note, photo, health) {
     id: emp.id, type, method, note, photo, time: new Date().toISOString(),
   };
   if (health) item.health = health;
+  if (emp.isVisitor) item.visitor = { company: emp.company, name: emp.name };
   queue.push(item);
   if (!store.set("queue", queue)) {
     // 端末の保存容量が足りない時は写真を外して保存（記録だけは残す）
     store.set("queue", queue.map(q => ({ ...q, photo: q === item ? "" : q.photo })));
   }
-  const e = employees.find(x => x.id === emp.id);
-  if (e) { e.status = type; if (health) e.healthDate = dayKey(new Date(item.time)); }
-  store.set("employees", employees);
+  applyLocal(item);
 
   showDone(emp, type);
   setTimeout(() => { if ($("done").classList.contains("active")) goHome(); }, CFG.doneMs);
   sendQueue();
+}
+
+// 記録をこの端末の一覧に反映する（Googleに届く前でも、すぐに色が変わるように）
+function applyLocal(q, save = true) {
+  let e = employees.find(x => x.id === q.id) || visitors.find(x => x.id === q.id);
+  if (!e && q.visitor) { e = { id: q.id, company: q.visitor.company, name: q.visitor.name, healthDate: "" }; visitors.push(e); }
+  if (e) { e.status = q.type; if (q.health) e.healthDate = dayKey(new Date(q.time)); }
+  if (save) { store.set("employees", employees); store.set("visitors", visitors); }
 }
 
 // ================================================================ Googleとの通信
@@ -796,12 +900,11 @@ async function refreshEmployees() {
     // ふりがなのあいうえお順（カタカナ・半角カナもひらがなとして並べる）
     const yomi = e => (e.kana || e.name).normalize("NFKC").replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
     employees = res.employees.sort((a, b) => yomi(a).localeCompare(yomi(b), "ja"));
+    visitors = res.visitors || [];
     // まだ送れていない記録の分を反映
-    for (const q of queue) {
-      const e = employees.find(x => x.id === q.id);
-      if (e) { e.status = q.type; if (q.health) e.healthDate = dayKey(new Date(q.time)); }
-    }
+    for (const q of queue) applyLocal(q, false);
     store.set("employees", employees);
+    store.set("visitors", visitors);
     netError = ""; netDetail = "";
   } catch (err) {
     netError = "Googleに接続できません";
