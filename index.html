@@ -285,6 +285,7 @@ let gasUrl = store.get("gasUrl", "");
 let token = store.get("gasToken", "");
 let employees = store.get("employees", []);   // [{id, name, kana, group:'staff'|'part'|'', status:'in'|'out', healthDate}]
 let visitors = store.get("visitors", []);     // その他の方（今日の分）[{id, company, name, status, healthDate}]
+let todayIn = store.get("todayIn", { date: "", ids: [] });   // Googleに届いている、今日入室した社員のID（全iPad分）
 let queue = store.get("queue", []);           // 未送信の記録
 let netError = "";
 let netDetail = "";   // 原因調査用の詳しい内容
@@ -384,10 +385,18 @@ function tick() {
   $("tip").textContent = TIPS[((n % TIPS.length) + TIPS.length) % TIPS.length];
 }
 
-// 今日の入室の順番と入室時刻（この端末で記録したもの。日付が変わったらリセット）
+// 今日この端末で記録した入室時刻（日付が変わったらリセット）
 function todayLog() {
   const t = store.get("today", null);
-  return t && t.date === ymd(new Date()) ? t : { date: ymd(new Date()), count: 0, inAt: {} };
+  return t && t.date === ymd(new Date()) ? t : { date: ymd(new Date()), inAt: {} };
+}
+
+// 今日 何人目の入室か（すでに入室していれば 0）。Googleに届いている全iPad分＋この端末の分で数える
+// （別のiPadでほぼ同時に入室した人がまだGoogleに届いていないと、同じ番号になることがある）
+function entryRank(id, t) {
+  const seen = new Set(todayIn.date === dayKey(new Date()) ? todayIn.ids : []);
+  Object.keys(t.inAt).forEach(x => seen.add(x));
+  return seen.has(id) ? 0 : seen.size + 1;
 }
 
 function confetti(type) {
@@ -412,7 +421,8 @@ function showDone(emp, type) {
   const t = todayLog();
   let badge = "";
   if (type === "in" && !emp.isVisitor) {
-    if (!t.inAt[emp.id]) { t.count++; badge = t.count === 1 ? "今日の一番乗り！ 🏆" : `今日 ${t.count}人目`; }
+    const rank = entryRank(emp.id, t);
+    if (rank) badge = rank === 1 ? "今日の一番乗り！ 🏆" : `今日 ${rank}人目`;
     t.inAt[emp.id] = now.toISOString();
   }
   store.set("today", t);
@@ -909,6 +919,7 @@ async function refreshEmployees() {
     const yomi = e => (e.kana || e.name).normalize("NFKC").replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
     employees = res.employees.sort((a, b) => yomi(a).localeCompare(yomi(b), "ja"));
     visitors = res.visitors || [];
+    if (res.todayIn) { todayIn = res.todayIn; store.set("todayIn", todayIn); }
     // まだ送れていない記録の分を反映
     for (const q of queue) applyLocal(q, false);
     store.set("employees", employees);
