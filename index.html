@@ -529,7 +529,25 @@ function nameButton(e) {
 // その他の方を、従業員と同じ形で扱えるようにする（isVisitor で見分ける）
 const visitorPerson = v => ({ ...v, isVisitor: true });
 
-function pickName(e) {
+const FRESH_MS = 5000;        // この時間内に読み直していれば、名前を押したときに読み直さない
+const FRESH_WAIT_MS = 8000;   // 読み直しを待つ最長の時間（つながらないときは、この端末の情報で進む）
+let triedAt = 0;   // 最後に読み直しを試した時刻（つながらないときに、何度も待たせないため）
+// 最新の状態を読み直す（待っている間に別の画面に移ったら false）
+async function ensureFresh() {
+  if (Date.now() - Math.max(refreshedAt, triedAt) <= FRESH_MS) return true;
+  const screen = document.querySelector(".screen.active").id;
+  modal("確認しています…");
+  await Promise.race([refreshEmployees(), new Promise(r => setTimeout(r, FRESH_WAIT_MS))]);
+  triedAt = Date.now();
+  hideModal();
+  return document.querySelector(".screen.active").id === screen;
+}
+
+async function pickName(e) {
+  if (!(await ensureFresh())) return;
+  const now = employees.find(x => x.id === e.id) || visitors.find(x => x.id === e.id);
+  if (now) e = e.isVisitor ? visitorPerson(now) : now;
+  if ($("list").classList.contains("active")) renderNames();
   // 健康チェックで異常があり、許可を待っている
   if (mode === "in" && e.blocked) {
     modal(`${e.name} さんは\n健康チェックの結果、入室を止めています。\n\n${e.isVisitor ? "受付の担当者" : "工場長"}の許可があるまで、\n現場には入らないでください。\n\n（許可されると、1分ほどで入室できるようになります）`,
@@ -576,11 +594,12 @@ function openVisitorForm() {
   setTimeout(() => $("vCompany").focus(), 100);
 }
 
-$("vNext").onclick = () => {
+$("vNext").onclick = async () => {
   const company = $("vCompany").value.trim();
   const name = $("vName").value.trim();
   if (!company || !name) { $("vMsg").textContent = "会社名とお名前を入力してください"; return; }
   document.activeElement && document.activeElement.blur();   // キーボードを閉じる
+  if (!(await ensureFresh())) return;   // 別のiPadで受付した人も探せるように
   // 今日すでに来ている同じ人（会社名・お名前が同じ。空白や全角・半角の違いは無視）なら、その人の記録として扱う
   //  入室中の人の退室／退室した人の再入室（健康チェックは1日1回）。見つからなければ新しい人
   const key = (c, n) => (c + "|" + n).normalize("NFKC").replace(/\s/g, "");
@@ -935,7 +954,15 @@ async function sendQueue() {
   }
 }
 
-async function refreshEmployees() {
+// 読み直しが重なったときは、同じ1回を待つ
+let refreshing = null;
+let refreshedAt = 0;   // 最後に一覧を読み直せた時刻
+function refreshEmployees() {
+  if (!refreshing) refreshing = loadEmployees().finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+async function loadEmployees() {
   if (!gasUrl || !token) { renderHome(); return; }
   try {
     const res = await api({ action: "list" });
@@ -949,6 +976,7 @@ async function refreshEmployees() {
     for (const q of queue) applyLocal(q, false);
     store.set("employees", employees);
     store.set("visitors", visitors);
+    refreshedAt = Date.now();
     netError = ""; netDetail = "";
   } catch (err) {
     netError = "Googleに接続できません";
