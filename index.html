@@ -57,6 +57,7 @@
   .name { height: 66px; font-size: 26px; background: #fff; color: #111; border: 2px solid #d1d5db; font-weight: bold; padding: 0 4px; }
   #names.compact .name { height: 56px; font-size: 24px; }   /* 1画面に収まらないときだけ少し小さくする */
   .name.in { color: #e67700; border-color: #f59f00; background: #fff7e6; }
+  .name.stop { color: #b91c1c; border-color: #ef4444; background: #fef2f2; }   /* 健康チェックで入室停止中 */
   .name.add { grid-column: span 2; font-size: 24px; background: #f9fafb; color: #374151; border: 2px dashed #9ca3af; }
 
   /* その他の方：会社名とお名前の入力 */
@@ -518,7 +519,7 @@ function fitNames() {
 
 function nameButton(e) {
   const b = document.createElement("button");
-  b.className = "name" + (e.status === "in" ? " in" : "");
+  b.className = "name" + (e.status === "in" ? " in" : e.blocked ? " stop" : "");
   b.textContent = e.name;
   b.onclick = () => pickName(e);
   return b;
@@ -528,6 +529,13 @@ function nameButton(e) {
 const visitorPerson = v => ({ ...v, isVisitor: true });
 
 function pickName(e) {
+  // 健康チェックで異常があり、許可を待っている
+  if (mode === "in" && e.blocked) {
+    modal(`${e.name} さんは\n健康チェックの結果、入室を止めています。\n\n${e.isVisitor ? "受付の担当者" : "工場長"}の許可があるまで、\n現場には入らないでください。\n\n（許可されると、1分ほどで入室できるようになります）`,
+      [{ label: "わかりました" }]);
+    refreshEmployees();   // 許可が出ていないか、すぐ確かめる
+    return;
+  }
   // 前回の退室を押し忘れている（入室中のまま）
   if (mode === "in" && e.status === "in") {
     modal(`${e.name} さんは\n退室の記録がありませんが、\n入室を記録しますか？`, [
@@ -683,10 +691,20 @@ function finishHealth(allOk) {
   if (marks.includes("×") || (temp !== null && temp >= CFG.feverTemp)) {
     let text = hc.emp.isVisitor ? "受付の担当者に伝え、\n指示を受けてください。" : "上司に報告し、\n指示を受けてください。";
     if (marks[WOUND] === "×") text += "\n\n手指・腕・顔面に傷や化膿創がある場合は、\n調理作業はできません。";
+    // 入室のときは撮影せずに記録だけ送り、その日の入室を止める（Google側から工場長にすぐメールが届く）
+    if (type === "in") { blockEntry(emp, note, health, text); return; }
     modal(text, [{ label: "わかりました（撮影へ）", cls: "in-color", onClick: go }]);
     return;
   }
   go();
+}
+
+const BLOCK_SHOW_MS = 30000;   // 入室できないお知らせを出しておく時間
+function blockEntry(emp, note, health, text) {
+  record(emp, "in", "健康チェック", note, "", health, true);
+  goHome();
+  modal(`${emp.name} さん\n\n健康チェックで当てはまらない項目があったため、\n入室できません。\n\n${emp.isVisitor ? "" : "工場長に連絡しました。\n"}${text}\n許可があるまで、現場には入らないでください。`,
+    [{ label: "わかりました" }], BLOCK_SHOW_MS);
 }
 
 $("allOkBtn").onclick = () => finishHealth(true);
@@ -825,12 +843,13 @@ $("manualBtn").onclick = () => takePhoto("手動");
 $("camBack").onclick = goHome;
 
 // ================================================================ 記録（先に画面を進め、送信は裏で行う）
-function record(emp, type, method, note, photo, health) {
+function record(emp, type, method, note, photo, health, blocked = false) {
   const item = {
     qid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
     id: emp.id, type, method, note, photo, time: new Date().toISOString(),
   };
   if (health) item.health = health;
+  if (blocked) item.blocked = true;   // 健康チェックで入室停止（Google側でも健康チェックの内容から判断する）
   if (emp.isVisitor) item.visitor = { company: emp.company, name: emp.name };
   queue.push(item);
   if (!store.set("queue", queue)) {
@@ -838,9 +857,10 @@ function record(emp, type, method, note, photo, health) {
     store.set("queue", queue.map(q => ({ ...q, photo: q === item ? "" : q.photo })));
   }
   applyLocal(item);
-
-  showDone(emp, type);
-  setTimeout(() => { if ($("done").classList.contains("active")) goHome(); }, CFG.doneMs);
+  if (!blocked) {
+    showDone(emp, type);
+    setTimeout(() => { if ($("done").classList.contains("active")) goHome(); }, CFG.doneMs);
+  }
   sendQueue();
 }
 
@@ -848,7 +868,11 @@ function record(emp, type, method, note, photo, health) {
 function applyLocal(q, save = true) {
   let e = employees.find(x => x.id === q.id) || visitors.find(x => x.id === q.id);
   if (!e && q.visitor) { e = { id: q.id, company: q.visitor.company, name: q.visitor.name, healthDate: "" }; visitors.push(e); }
-  if (e) { e.status = q.type; if (q.health) e.healthDate = dayKey(new Date(q.time)); }
+  if (e) {
+    if (q.blocked) e.blocked = true;   // 入室停止：入室中にはしない
+    else e.status = q.type;
+    if (q.health) e.healthDate = dayKey(new Date(q.time));
+  }
   if (save) { store.set("employees", employees); store.set("visitors", visitors); }
 }
 
